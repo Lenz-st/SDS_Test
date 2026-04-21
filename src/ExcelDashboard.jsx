@@ -1,6 +1,6 @@
-import React, { useState, useCallback, useMemo } from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, LineChart, Line, PieChart, Pie, Cell, ResponsiveContainer, AreaChart, Area } from 'recharts';
-import { Upload, FileSpreadsheet, GraduationCap, Users, DollarSign, BookOpen, Download, Filter, Search, Calendar, School, Award, TrendingUp, UserCheck } from 'lucide-react';
+import { Award, BookOpen, DollarSign, FileSpreadsheet, GraduationCap, School, Search, TrendingUp, Upload, UserCheck, Users } from 'lucide-react';
+import React, { useCallback, useMemo, useState } from 'react';
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import * as XLSX from 'xlsx';
 
 const ScholarshipDashboard = () => {
@@ -11,6 +11,7 @@ const ScholarshipDashboard = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedMetric, setSelectedMetric] = useState('');
   const [selectedInstitution, setSelectedInstitution] = useState('ทั้งหมด');
+  const [selectedScholarshipType, setSelectedScholarshipType] = useState('ทั้งหมด');
 
   // Education-themed color palette
   const colors = ['#3b82f6', '#8b5cf6', '#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#84cc16'];
@@ -47,7 +48,12 @@ const ScholarshipDashboard = () => {
         const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
 
         if (jsonData.length > 0) {
-          const headerRow = jsonData[0];
+          const rawHeaderRow = jsonData[0];
+          const headerRow = rawHeaderRow.map((header, index) =>
+            header && typeof header === 'string'
+              ? header
+              : `คอลัมน์ที่ ${index + 1}`
+          );
           const dataRows = jsonData.slice(1).filter(row => row.some(cell => cell !== undefined && cell !== ''));
 
           const processedData = dataRows.map((row, index) => {
@@ -85,6 +91,18 @@ const ScholarshipDashboard = () => {
     return ['ทั้งหมด', ...uniqueInstitutions];
   }, [data, headers]);
 
+  const scholarshipTypes = useMemo(() => {
+    if (data.length === 0) return ['ทั้งหมด'];
+    let scholarshipColumn = headers.find(h => typeof h === 'string' && h.includes('ได้รับทุน/สำรองทุน'));
+    if (!scholarshipColumn) {
+      scholarshipColumn = headers.find(h => typeof h === 'string' && h.includes('ได้รับทุน'));
+    }
+    if (!scholarshipColumn) return ['ทั้งหมด'];
+
+    const uniqueTypes = [...new Set(data.map(row => row[scholarshipColumn]).filter(Boolean))];
+    return ['ทั้งหมด', ...uniqueTypes];
+  }, [data, headers]);
+
   const filteredData = useMemo(() => {
     let filtered = data.length > 0 ? data : previewData;
 
@@ -98,17 +116,28 @@ const ScholarshipDashboard = () => {
 
     if (selectedInstitution !== 'ทั้งหมด' && data.length > 0) {
       const institutionColumn = headers.find(h =>
-        h.toLowerCase().includes('สถาบัน') ||
-        h.toLowerCase().includes('มหาวิทยาลัย') ||
-        h.toLowerCase().includes('institution')
+        typeof h === 'string' &&
+        (h.toLowerCase().includes('สถาบัน') ||
+          h.toLowerCase().includes('มหาวิทยาลัย') ||
+          h.toLowerCase().includes('institution'))
       );
       if (institutionColumn) {
         filtered = filtered.filter(row => row[institutionColumn] === selectedInstitution);
       }
     }
 
+    if (selectedScholarshipType !== 'ทั้งหมด' && data.length > 0) {
+      let scholarshipColumn = headers.find(h => typeof h === 'string' && h.includes('ได้รับทุน/สำรองทุน'));
+      if (!scholarshipColumn) {
+        scholarshipColumn = headers.find(h => typeof h === 'string' && h.includes('ได้รับทุน'));
+      }
+      if (scholarshipColumn) {
+        filtered = filtered.filter(row => row[scholarshipColumn] === selectedScholarshipType);
+      }
+    }
+
     return filtered;
-  }, [data, searchTerm, selectedInstitution, headers]);
+  }, [data, searchTerm, selectedInstitution, selectedScholarshipType, headers]);
 
   const summaryStats = useMemo(() => {
     const dataToAnalyze = data.length > 0 ? filteredData : previewData;
@@ -174,6 +203,95 @@ const ScholarshipDashboard = () => {
 
     return Object.values(grouped).slice(0, 10);
   }, [filteredData, selectedMetric, headers, data]);
+
+  // All scholarships data (sorted by count)
+  const allScholarshipsData = useMemo(() => {
+    if (data.length === 0) return [];
+
+    let scholarshipColumn = headers.find(h => typeof h === 'string' && h.includes('ได้รับทุน/สำรองทุน'));
+    if (!scholarshipColumn) {
+      scholarshipColumn = headers.find(h => typeof h === 'string' && h.includes('ได้รับทุน'));
+    }
+    if (!scholarshipColumn) return [];
+
+    const counts = filteredData.reduce((acc, row) => {
+      const key = row[scholarshipColumn] || 'ไม่มีข้อมูล';
+      if (!acc[key]) acc[key] = { name: key, count: 0 };
+      acc[key].count += 1;
+      return acc;
+    }, {});
+
+    return Object.values(counts).sort((a, b) => b.count - a.count);
+  }, [filteredData, headers, data]);
+
+  // Distribution by scholarship type (ใช้คอลัมน์ ได้รับทุน/สำรองทุน)
+  const scholarshipTypeChartData = useMemo(() => {
+    if (!allScholarshipsData || allScholarshipsData.length === 0) return [];
+
+    // แสดงทุกทุน เรียงจากมากไปน้อย
+    return [...allScholarshipsData];
+  }, [allScholarshipsData]);
+
+  // Distribution by faculty (คณะ)
+  const facultyChartData = useMemo(() => {
+    if (data.length === 0) return [];
+
+    const facultyColumn = headers.find(
+      (h) => typeof h === 'string' && h.includes('คณะ')
+    );
+    if (!facultyColumn) return [];
+
+    const counts = filteredData.reduce((acc, row) => {
+      const key = row[facultyColumn] || 'ไม่ระบุคณะ';
+      if (!acc[key]) acc[key] = { name: key, count: 0 };
+      acc[key].count += 1;
+      return acc;
+    }, {});
+
+    return Object.values(counts).slice(0, 15);
+  }, [filteredData, headers, data]);
+
+  // Distribution by awareness / channel (การแนะแนว, Website, Social Media, ฯลฯ)
+  const channelChartData = useMemo(() => {
+    if (data.length === 0) return [];
+
+    const channelKeywords = [
+      'การแนะแนว',
+      'สื่อสิ่งพิมพ์',
+      'ตลาดนัดอุดมศึกษา',
+      'โฆษณาโทรทัศน์',
+      'บูธประชาสัมพันธ์',
+      'Young Creative Program',
+      'คุณครูที่โรงเรียน',
+      'Website',
+      'Social Media',
+      'งานประกวด',
+      'อื่นๆ',
+    ];
+
+    const channelColumns = headers.filter(
+      (h) =>
+        typeof h === 'string' &&
+        channelKeywords.some((keyword) => h.includes(keyword))
+    );
+
+    if (!channelColumns.length) return [];
+
+    const counts = {};
+
+    filteredData.forEach((row) => {
+      channelColumns.forEach((col) => {
+        const value = row[col];
+        if (value !== undefined && value !== null && value !== '' && value !== 0 && value !== '0') {
+          const key = col;
+          if (!counts[key]) counts[key] = { name: key, count: 0 };
+          counts[key].count += 1;
+        }
+      });
+    });
+
+    return Object.values(counts).slice(0, 15);
+  }, [filteredData, headers, data]);
 
   const ScholarshipStatCard = ({ title, value, icon: Icon, gradient, subtitle, trend }) => (
     <div className="relative overflow-hidden bg-white rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1">
@@ -423,34 +541,7 @@ const ScholarshipDashboard = () => {
           <>
             {/* Modern Controls */}
             <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl p-6 mb-8 border border-white/20">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="space-y-2">
-                  <label className="block text-sm font-semibold text-gray-700">ค้นหาข้อมูล</label>
-                  <div className="relative">
-                    <Search className="absolute left-4 top-3 h-5 w-5 text-gray-400" />
-                    <input
-                      type="text"
-                      placeholder="ค้นหาในทุกคอลัมน์..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="w-full pl-12 pr-4 py-3 border-2 border-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white/50"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="block text-sm font-semibold text-gray-700">เลือกข้อมูลที่ต้องการดู</label>
-                  <select
-                    value={selectedMetric}
-                    onChange={(e) => setSelectedMetric(e.target.value)}
-                    className="w-full px-4 py-3 border-2 border-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white/50"
-                  >
-                    {headers.map(header => (
-                      <option key={header} value={header}>{header}</option>
-                    ))}
-                  </select>
-                </div>
-
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <label className="block text-sm font-semibold text-gray-700">เลือกสถาบัน</label>
                   <select
@@ -463,104 +554,231 @@ const ScholarshipDashboard = () => {
                     ))}
                   </select>
                 </div>
+
+                <div className="space-y-2">
+                  <label className="block text-sm font-semibold text-gray-700">ประเภททุน/ส่วนลด</label>
+                  <select
+                    value={selectedScholarshipType}
+                    onChange={(e) => setSelectedScholarshipType(e.target.value)}
+                    className="w-full px-4 py-3 border-2 border-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white/50"
+                  >
+                    {scholarshipTypes.map(type => (
+                      <option key={type} value={type}>{type}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
             </div>
 
-            {/* Summary Stats for Scholarships */}
-            {Object.keys(summaryStats).length > 0 && (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                {Object.entries(summaryStats).slice(0, 4).map(([column, stats], index) => {
-                  const titles = {
-                    students: 'จำนวนนักศึกษา',
-                    scholarships: 'ทุนการศึกษา',
-                    budget: 'งบประมาณ (บาท)',
-                    approved: 'อนุมัติแล้ว'
-                  };
-                  const icons = [Users, Award, DollarSign, UserCheck];
-
-                  return (
-                    <ScholarshipStatCard
-                      key={column}
-                      title={titles[column] || column}
-                      value={column === 'budget' ? `${(stats.total / 1000000).toFixed(1)}M` : stats.total.toLocaleString()}
-                      subtitle={`เฉลี่ย: ${column === 'budget' ? `${(stats.average / 1000000).toFixed(1)}M` : stats.average.toFixed(0)}`}
-                      icon={icons[index % icons.length]}
-                      gradient={gradients[index % gradients.length]}
-                      trend={Math.floor(Math.random() * 15) + 5}
-                    />
-                  );
-                })}
+            {/* Scholarship Type Chart - Expanded at top */}
+            {data.length > 0 && (
+              <div className="grid grid-cols-1 gap-8 mb-8">
+                <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl p-6 border border-white/20">
+                  <div className="flex items-center justify-between mb-6">
+                    <h3 className="text-xl font-bold text-gray-900 flex items-center">
+                      <div className="p-2 bg-gradient-to-r from-emerald-500 to-green-600 rounded-lg mr-3">
+                        <Award className="h-5 w-5 text-white" />
+                      </div>
+                      จำนวนผู้ได้รับทุนตามประเภททุน
+                    </h3>
+                  </div>
+                  <div className="overflow-y-auto custom-scrollbar pr-2" style={{ height: '400px' }}>
+                    <ResponsiveContainer width="100%" height={Math.max(400, scholarshipTypeChartData.length * 35 + 40)}>
+                      <BarChart data={scholarshipTypeChartData} layout="vertical" margin={{ left: 0, right: 20 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" horizontal={true} vertical={false} />
+                        <XAxis type="number" stroke="#64748b" hide />
+                        <YAxis
+                          dataKey="name"
+                          type="category"
+                          stroke="#64748b"
+                          width={220}
+                          tick={{ fontSize: 11, fill: '#475569' }}
+                          axisLine={false}
+                          tickLine={false}
+                        />
+                        <Tooltip
+                          cursor={{ fill: '#f1f5f9' }}
+                          contentStyle={{
+                            backgroundColor: 'white',
+                            border: 'none',
+                            borderRadius: '12px',
+                            boxShadow: '0 10px 25px rgba(0,0,0,0.1)',
+                          }}
+                          formatter={(value) => [`${value} คน`, 'จำนวน']}
+                        />
+                        <Bar dataKey="count" radius={[0, 8, 8, 0]} barSize={24}>
+                          {scholarshipTypeChartData.map((entry, index) => {
+                            const isTop = index === 0;
+                            return (
+                              <Cell
+                                key={`cell-${index}`}
+                                fill={isTop ? '#10b981' : '#6ee7b7'}
+                              />
+                            );
+                          })}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
               </div>
             )}
 
-            {/* Modern Charts */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-              <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl p-6 border border-white/20">
+            {/* Age & Gender alongside Faculty Chart */}
+            {data.length > 0 && (
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
+                {/* Left Column: Stats Cards */}
+                <div className="col-span-1 flex flex-col gap-6">
+                  {(() => {
+                    const cardsData = [];
+                    const ageCol = headers.find(h => typeof h === 'string' && h.includes('อายุ'));
+                    const genderCol = headers.find(h => typeof h === 'string' && h.includes('เพศ'));
+
+                    if (ageCol && summaryStats[ageCol]) {
+                      cardsData.push({
+                        title: ageCol,
+                        value: summaryStats[ageCol].average.toFixed(0),
+                        subtitle: 'ค่าเฉลี่ย',
+                        icon: Users
+                      });
+                    }
+
+                    if (genderCol) {
+                      if (summaryStats[genderCol]) {
+                        cardsData.push({
+                          title: genderCol,
+                          value: summaryStats[genderCol].average.toFixed(1),
+                          subtitle: 'ค่าเฉลี่ย',
+                          icon: Users
+                        });
+                      } else {
+                        const counts = filteredData.reduce((acc, row) => {
+                          const val = row[genderCol];
+                          if (val) acc[val] = (acc[val] || 0) + 1;
+                          return acc;
+                        }, {});
+                        let maxVal = '-';
+                        let maxCount = 0;
+                        Object.entries(counts).forEach(([k, v]) => {
+                          if (v > maxCount) {
+                            maxCount = v;
+                            maxVal = k;
+                          }
+                        });
+                        cardsData.push({
+                          title: genderCol,
+                          value: maxVal,
+                          subtitle: `ส่วนใหญ่ (${maxCount} คน)`,
+                          icon: Users
+                        });
+                      }
+                    }
+
+                    return cardsData.map((card, index) => (
+                      <div className="h-full" key={card.title}>
+                        <ScholarshipStatCard
+                          title={card.title}
+                          value={card.value}
+                          subtitle={card.subtitle}
+                          icon={card.icon}
+                          gradient={gradients[index % gradients.length]}
+                          trend={Math.floor(Math.random() * 15) + 5}
+                        />
+                      </div>
+                    ));
+                  })()}
+                </div>
+
+                {/* Right Column: Faculty Chart */}
+                <div className="col-span-1 lg:col-span-2 bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl p-6 border border-white/20 flex flex-col">
+                  <div className="flex items-center justify-between mb-6">
+                    <h3 className="text-xl font-bold text-gray-900 flex items-center">
+                      <div className="p-2 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-lg mr-3">
+                        <School className="h-5 w-5 text-white" />
+                      </div>
+                      จำนวนผู้ได้รับทุนตามคณะ
+                    </h3>
+                  </div>
+                  <div className="flex-1 min-h-[280px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={facultyChartData}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                        <XAxis
+                          dataKey="name"
+                          stroke="#64748b"
+                          tick={{ fontSize: 10 }}
+                          angle={-45}
+                          textAnchor="end"
+                          height={80}
+                        />
+                        <YAxis stroke="#64748b" />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: 'white',
+                            border: 'none',
+                            borderRadius: '12px',
+                            boxShadow: '0 10px 25px rgba(0,0,0,0.1)',
+                          }}
+                        />
+                        <Bar dataKey="count" fill="#3b82f6" radius={[8, 8, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* All Scholarships Dashboard */}
+            {allScholarshipsData && allScholarshipsData.length > 0 && (
+              <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl p-6 border border-white/20 mb-8">
                 <div className="flex items-center justify-between mb-6">
                   <h3 className="text-xl font-bold text-gray-900 flex items-center">
-                    <div className="p-2 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-lg mr-3">
-                      <BarChart3 className="h-5 w-5 text-white" />
+                    <div className="p-2 bg-gradient-to-r from-amber-500 to-orange-600 rounded-lg mr-3">
+                      <BookOpen className="h-5 w-5 text-white" />
                     </div>
-                    กราฟแท่ง - {selectedMetric}
+                    รายชื่อทุนทั้งหมด ({allScholarshipsData.length} ทุน)
                   </h3>
                 </div>
-                <ResponsiveContainer width="100%" height={350}>
-                  <BarChart data={chartData}>
-                    <defs>
-                      <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8} />
-                        <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0.8} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                    <XAxis
-                      dataKey="name"
-                      stroke="#64748b"
-                      tick={{ fontSize: 11 }}
-                      angle={-45}
-                      textAnchor="end"
-                      height={80}
-                    />
-                    <YAxis stroke="#64748b" />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: 'white',
-                        border: 'none',
-                        borderRadius: '12px',
-                        boxShadow: '0 10px 25px rgba(0,0,0,0.1)'
-                      }}
-                    />
-                    <Bar
-                      dataKey="value"
-                      fill="url(#barGradient)"
-                      radius={[8, 8, 0, 0]}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-96 overflow-y-auto pr-2 custom-scrollbar">
+                  {allScholarshipsData.map((item, index) => (
+                    <div key={index} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-100 hover:shadow-md hover:border-amber-200 transition-all">
+                      <span className="font-medium text-gray-800 break-words flex-1 pr-4">{item.name}</span>
+                      <span className="px-3 py-1 bg-amber-100 text-amber-800 rounded-full text-sm font-bold shadow-sm whitespace-nowrap">
+                        {item.count} คน
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
+            )}
 
+            {/* By channel - big chart on its own row (bottom) */}
+            <div className="grid grid-cols-1 gap-8 mb-8">
               <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl p-6 border border-white/20">
                 <div className="flex items-center justify-between mb-6">
                   <h3 className="text-xl font-bold text-gray-900 flex items-center">
                     <div className="p-2 bg-gradient-to-r from-purple-500 to-pink-600 rounded-lg mr-3">
-                      <Award className="h-5 w-5 text-white" />
+                      <Users className="h-5 w-5 text-white" />
                     </div>
-                    การกระจายทุน - {selectedMetric}
+                    ช่องทางที่รู้จักมหาวิทยาลัย (ผู้ได้ทุน)
                   </h3>
                 </div>
-                <ResponsiveContainer width="100%" height={350}>
+                <ResponsiveContainer width="100%" height={320}>
                   <PieChart>
                     <Pie
-                      data={chartData}
+                      data={channelChartData}
                       cx="50%"
                       cy="50%"
-                      innerRadius={60}
-                      outerRadius={120}
-                      paddingAngle={5}
-                      dataKey="value"
+                      innerRadius={70}
+                      outerRadius={130}
+                      paddingAngle={4}
+                      dataKey="count"
                     >
-                      {chartData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
+                      {channelChartData.map((entry, index) => (
+                        <Cell
+                          key={`cell-channel-${index}`}
+                          fill={colors[index % colors.length]}
+                        />
                       ))}
                     </Pie>
                     <Tooltip
@@ -568,13 +786,14 @@ const ScholarshipDashboard = () => {
                         backgroundColor: 'white',
                         border: 'none',
                         borderRadius: '12px',
-                        boxShadow: '0 10px 25px rgba(0,0,0,0.1)'
+                        boxShadow: '0 10px 25px rgba(0,0,0,0.1)',
                       }}
                     />
                     <Legend />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
+
             </div>
 
             {/* Modern Data Table */}
