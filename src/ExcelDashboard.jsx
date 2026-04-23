@@ -2,6 +2,7 @@ import { Award, BookOpen, DollarSign, FileSpreadsheet, GraduationCap, School, Se
 import React, { useCallback, useMemo, useState } from 'react';
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import * as XLSX from 'xlsx';
+import MultiSelectDropdown from './components/MultiSelectDropdown';
 
 const ScholarshipDashboard = () => {
   const [data, setData] = useState([]);
@@ -10,8 +11,10 @@ const ScholarshipDashboard = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedMetric, setSelectedMetric] = useState('');
-  const [selectedInstitution, setSelectedInstitution] = useState('ทั้งหมด');
-  const [selectedScholarshipType, setSelectedScholarshipType] = useState('ทั้งหมด');
+  const [selectedInstitution, setSelectedInstitution] = useState([]);
+  const [selectedScholarshipType, setSelectedScholarshipType] = useState([]);
+  const [selectedFaculty, setSelectedFaculty] = useState([]);
+  const [selectedFacultyGroup, setSelectedFacultyGroup] = useState([]);
 
   // Education-themed color palette
   const colors = ['#3b82f6', '#8b5cf6', '#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#84cc16'];
@@ -103,6 +106,25 @@ const ScholarshipDashboard = () => {
     return ['ทั้งหมด', ...uniqueTypes];
   }, [data, headers]);
 
+  const faculties = useMemo(() => {
+    if (data.length === 0) return ['ทั้งหมด'];
+    let facultyColumn = headers.find(h => typeof h === 'string' && (h.includes('สาขา') || h.toLowerCase().includes('major')));
+    if (!facultyColumn) facultyColumn = headers.find(h => typeof h === 'string' && (h.includes('คณะ') || h.toLowerCase().includes('faculty')));
+    if (!facultyColumn) return ['ทั้งหมด'];
+
+    const uniqueFaculties = [...new Set(data.map(row => row[facultyColumn]).filter(Boolean))];
+    return ['ทั้งหมด', ...uniqueFaculties].sort();
+  }, [data, headers]);
+
+  const facultyGroups = useMemo(() => {
+    if (data.length === 0) return ['ทั้งหมด'];
+    const facultyColumn = headers.find(h => typeof h === 'string' && (h.includes('คณะ') || h.toLowerCase().includes('faculty')));
+    if (!facultyColumn) return ['ทั้งหมด'];
+
+    const uniqueFaculties = [...new Set(data.map(row => row[facultyColumn]).filter(Boolean))];
+    return ['ทั้งหมด', ...uniqueFaculties].sort();
+  }, [data, headers]);
+
   const filteredData = useMemo(() => {
     let filtered = data.length > 0 ? data : previewData;
 
@@ -114,7 +136,7 @@ const ScholarshipDashboard = () => {
       );
     }
 
-    if (selectedInstitution !== 'ทั้งหมด' && data.length > 0) {
+    if (selectedInstitution.length > 0 && data.length > 0) {
       const institutionColumn = headers.find(h =>
         typeof h === 'string' &&
         (h.toLowerCase().includes('สถาบัน') ||
@@ -122,22 +144,37 @@ const ScholarshipDashboard = () => {
           h.toLowerCase().includes('institution'))
       );
       if (institutionColumn) {
-        filtered = filtered.filter(row => row[institutionColumn] === selectedInstitution);
+        filtered = filtered.filter(row => selectedInstitution.includes(row[institutionColumn]));
       }
     }
 
-    if (selectedScholarshipType !== 'ทั้งหมด' && data.length > 0) {
+    if (selectedScholarshipType.length > 0 && data.length > 0) {
       let scholarshipColumn = headers.find(h => typeof h === 'string' && h.includes('ได้รับทุน/สำรองทุน'));
       if (!scholarshipColumn) {
         scholarshipColumn = headers.find(h => typeof h === 'string' && h.includes('ได้รับทุน'));
       }
       if (scholarshipColumn) {
-        filtered = filtered.filter(row => row[scholarshipColumn] === selectedScholarshipType);
+        filtered = filtered.filter(row => selectedScholarshipType.includes(row[scholarshipColumn]));
+      }
+    }
+
+    if (selectedFaculty.length > 0 && data.length > 0) {
+      let facultyColumn = headers.find(h => typeof h === 'string' && (h.includes('สาขา') || h.toLowerCase().includes('major')));
+      if (!facultyColumn) facultyColumn = headers.find(h => typeof h === 'string' && (h.includes('คณะ') || h.toLowerCase().includes('faculty')));
+      if (facultyColumn) {
+        filtered = filtered.filter(row => selectedFaculty.includes(row[facultyColumn]));
+      }
+    }
+
+    if (selectedFacultyGroup.length > 0 && data.length > 0) {
+      const facultyColumn = headers.find(h => typeof h === 'string' && (h.includes('คณะ') || h.toLowerCase().includes('faculty')));
+      if (facultyColumn) {
+        filtered = filtered.filter(row => selectedFacultyGroup.includes(row[facultyColumn]));
       }
     }
 
     return filtered;
-  }, [data, searchTerm, selectedInstitution, selectedScholarshipType, headers]);
+  }, [data, searchTerm, selectedInstitution, selectedScholarshipType, selectedFaculty, selectedFacultyGroup, headers]);
 
   const summaryStats = useMemo(() => {
     const dataToAnalyze = data.length > 0 ? filteredData : previewData;
@@ -400,172 +437,154 @@ const ScholarshipDashboard = () => {
         )}
 
         {!data.length && !isLoading ? (
-          <>
-            {/* Hero Section with Preview */}
-            <div className="text-center py-12 mb-12">
-              <div className="max-w-4xl mx-auto">
-                <div className="flex items-center justify-center mb-6">
-                  <div className="p-4 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-2xl shadow-xl">
-                    <GraduationCap className="h-12 w-12 text-white" />
+          <div className="animate-fade-in-up">
+            {/* Hero Section */}
+            <div className="relative overflow-hidden rounded-3xl bg-white shadow-2xl mb-16 border border-blue-100">
+              <div className="absolute top-0 right-0 -mt-20 -mr-20 w-96 h-96 bg-gradient-to-br from-blue-400 to-indigo-500 rounded-full opacity-10 blur-3xl"></div>
+              <div className="absolute bottom-0 left-0 -mb-20 -ml-20 w-80 h-80 bg-gradient-to-tr from-purple-400 to-pink-500 rounded-full opacity-10 blur-3xl"></div>
+              
+              <div className="relative px-8 py-20 lg:px-16 lg:py-28 text-center">
+                <div className="flex justify-center mb-8">
+                  <div className="inline-flex items-center justify-center p-5 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-3xl shadow-xl transform -rotate-6 transition-transform hover:rotate-0 duration-300">
+                    <GraduationCap className="h-16 w-16 text-white transform rotate-6" />
                   </div>
                 </div>
-                <h2 className="text-3xl font-bold text-gray-900 mb-4">
-                  ยินดีต้อนรับสู่ระบบจัดการทุนการศึกษา
+                
+                <h2 className="text-4xl md:text-5xl lg:text-6xl font-extrabold text-gray-900 tracking-tight mb-6">
+                  ยกระดับการจัดการทุนการศึกษา <br className="hidden md:block mt-2" />
+                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600">ด้วย Data Analytics</span>
                 </h2>
-                <p className="text-xl text-gray-600 mb-8">
-                  นำเข้าข้อมูลจากไฟล์ Excel เพื่อติดตามและวิเคราะห์ทุนการศึกษาของแต่ละสถาบัน
+                
+                <p className="text-xl md:text-2xl text-gray-600 max-w-3xl mx-auto mb-10 leading-relaxed">
+                  เปลี่ยนข้อมูลบน Excel ให้เป็น Dashboard อัจฉริยะในพริบตา วิเคราะห์จำนวนนักศึกษา  
+                  และการกระจายตัวของทุนได้แบบ Real-time
                 </p>
 
-                {/* Preview Charts */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-12">
-                  <div className="bg-white rounded-2xl shadow-xl p-6">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                      <School className="h-5 w-5 mr-2 text-blue-600" />
-                      จำนวนนักศึกษาต่อสถาบัน
-                    </h3>
-                    <ResponsiveContainer width="100%" height={220}>
-                      <AreaChart data={previewData}>
-                        <defs>
-                          <linearGradient id="studentsGradient" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8} />
-                            <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.1} />
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                        <XAxis
-                          dataKey="institution"
-                          stroke="#64748b"
-                          tick={{ fontSize: 10 }}
-                          angle={-45}
-                          textAnchor="end"
-                          height={60}
-                        />
-                        <YAxis stroke="#64748b" />
-                        <Tooltip
-                          contentStyle={{
-                            backgroundColor: 'white',
-                            border: 'none',
-                            borderRadius: '12px',
-                            boxShadow: '0 10px 25px rgba(0,0,0,0.1)'
-                          }}
-                        />
-                        <Area
-                          type="monotone"
-                          dataKey="students"
-                          stroke="#3b82f6"
-                          fillOpacity={1}
-                          fill="url(#studentsGradient)"
-                          strokeWidth={3}
-                        />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
-
-                  <div className="bg-white rounded-2xl shadow-xl p-6">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                      <Award className="h-5 w-5 mr-2 text-purple-600" />
-                      งบประมาณทุนแต่ละสถาบัน
-                    </h3>
-                    <ResponsiveContainer width="100%" height={220}>
-                      <PieChart>
-                        <Pie
-                          data={previewData.slice(0, 4)}
-                          cx="50%"
-                          cy="50%"
-                          innerRadius={40}
-                          outerRadius={80}
-                          paddingAngle={5}
-                          dataKey="budget"
-                        >
-                          {previewData.slice(0, 4).map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={colors[index]} />
-                          ))}
-                        </Pie>
-                        <Tooltip
-                          formatter={(value) => [
-                            `${(value / 1000000).toFixed(1)}M บาท`,
-                            'งบประมาณ'
-                          ]}
-                          contentStyle={{
-                            backgroundColor: 'white',
-                            border: 'none',
-                            borderRadius: '12px',
-                            boxShadow: '0 10px 25px rgba(0,0,0,0.1)'
-                          }}
-                        />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-6">
+                  <label
+                    htmlFor="file-upload"
+                    className="relative group cursor-pointer inline-flex items-center justify-center px-8 py-5 text-lg font-bold text-white transition-all duration-300 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl overflow-hidden shadow-xl hover:shadow-blue-500/30 hover:scale-105"
+                  >
+                    <div className="absolute inset-0 w-full h-full -mt-1 rounded-lg opacity-30 bg-gradient-to-b from-transparent via-transparent to-black"></div>
+                    <Upload className="relative h-6 w-6 mr-3 group-hover:-translate-y-1 transition-transform" />
+                    <span className="relative">อัพโหลดไฟล์ Excel เพื่อเริ่มต้น</span>
+                  </label>
+                  
+                  {/* <a href="#" className="inline-flex items-center justify-center px-8 py-5 text-lg font-bold text-gray-700 bg-white border-2 border-gray-200 rounded-2xl hover:bg-gray-50 hover:border-gray-300 transition-all duration-300 shadow-sm hover:shadow-md">
+                    <FileSpreadsheet className="h-6 w-6 mr-3 text-gray-400" />
+                    ดูตัวอย่างไฟล์
+                  </a> */}
                 </div>
-
-                <label
-                  htmlFor="file-upload"
-                  className="inline-flex items-center space-x-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-8 py-4 rounded-2xl cursor-pointer hover:from-blue-700 hover:to-indigo-700 transition-all duration-300 shadow-xl hover:shadow-2xl transform hover:-translate-y-1 text-lg font-semibold"
-                >
-                  <Upload className="h-6 w-6" />
-                  <span>เริ่มต้นใช้งาน - นำเข้าไฟล์ Excel</span>
-                  <GraduationCap className="h-5 w-5" />
-                </label>
               </div>
             </div>
 
-            {/* Feature Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
-              <FeatureCard
-                icon={School}
-                title="จัดการสถาบัน"
-                description="ติดตามข้อมูลทุนการศึกษาของแต่ละสถาบันการศึกษา"
-                color="from-blue-500 to-indigo-600"
-              />
-              <FeatureCard
-                icon={Users}
-                title="ข้อมูลนักศึกษา"
-                description="วิเคราะห์จำนวนนักศึกษาและผู้ได้รับทุนแบบ Real-time"
-                color="from-purple-500 to-violet-600"
-              />
-              <FeatureCard
-                icon={DollarSign}
-                title="งบประมาณทุน"
-                description="ติดตามการใช้จ่ายและการจัดสรรงบประมาณทุนการศึกษา"
-                color="from-emerald-500 to-green-600"
-              />
-              <FeatureCard
-                icon={Award}
-                title="รายงานผล"
-                description="สรุปผลการให้ทุนและประเมินความสำเร็จ"
-                color="from-amber-500 to-orange-600"
-              />
+            {/* How it Works Section */}
+            <div className="mb-24">
+              <div className="text-center mb-16">
+                <h3 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">ทำงานง่ายๆ ใน 3 ขั้นตอน</h3>
+                <div className="w-24 h-1.5 bg-gradient-to-r from-blue-500 to-indigo-500 mx-auto rounded-full"></div>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-8 relative max-w-5xl mx-auto">
+                <div className="hidden md:block absolute top-1/2 left-[15%] right-[15%] h-1 bg-gradient-to-r from-blue-100 via-indigo-200 to-purple-100 -z-10 transform -translate-y-1/2 rounded-full"></div>
+                
+                {[
+                  { step: "1", title: "เตรียมข้อมูล", desc: "เตรียมข้อมูลนักศึกษาและทุนในรูปแบบไฟล์ .xlsx หรือ .csv", icon: FileSpreadsheet, color: "text-blue-600", bg: "bg-blue-100" },
+                  { step: "2", title: "อัพโหลดไฟล์", desc: "กดปุ่มอัพโหลดบนระบบ เลือกไฟล์ที่เตรียมไว้", icon: Upload, color: "text-indigo-600", bg: "bg-indigo-100" },
+                  { step: "3", title: "ดูผลลัพธ์", desc: "ระบบจะสร้าง Dashboard และกราฟวิเคราะห์ให้ทันที", icon: TrendingUp, color: "text-purple-600", bg: "bg-purple-100" }
+                ].map((item, i) => (
+                  <div key={i} className="bg-white rounded-3xl p-8 shadow-xl border border-gray-100 text-center relative hover:-translate-y-2 transition-transform duration-300">
+                    <div className="absolute -top-6 left-1/2 transform -translate-x-1/2 w-12 h-12 bg-white rounded-full flex items-center justify-center font-bold text-xl text-gray-900 shadow-md border-4 border-white">
+                      {item.step}
+                    </div>
+                    <div className={`mx-auto w-24 h-24 ${item.bg} rounded-full flex items-center justify-center mb-6 mt-4`}>
+                      <item.icon className={`h-12 w-12 ${item.color}`} />
+                    </div>
+                    <h4 className="text-xl font-bold text-gray-900 mb-3">{item.title}</h4>
+                    <p className="text-gray-600 text-lg">{item.desc}</p>
+                  </div>
+                ))}
+              </div>
             </div>
-          </>
+
+            {/* Features Grid */}
+            <div className="mb-12">
+              <div className="text-center mb-16">
+                <h3 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">ฟีเจอร์ที่ช่วยให้งานคุณง่ายขึ้น</h3>
+                <div className="w-24 h-1.5 bg-gradient-to-r from-purple-500 to-pink-500 mx-auto rounded-full"></div>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <FeatureCard
+                  icon={School}
+                  title="ภาพรวมสถาบัน"
+                  description="ดูสรุปจำนวนนักศึกษา งบประมาณ และการอนุมัติทุนของแต่ละสถาบันได้ในหน้าเดียว"
+                  color="from-blue-500 to-indigo-600"
+                />
+                <FeatureCard
+                  icon={Users}
+                  title="สถิติผู้รับทุน"
+                  description="วิเคราะห์ข้อมูลประชากรศาสตร์ เช่น อายุ เพศ คณะที่สังกัด ของผู้ได้รับทุน"
+                  color="from-purple-500 to-violet-600"
+                />
+                <FeatureCard
+                  icon={Award}
+                  title="เจาะลึกประเภททุน"
+                  description="ดูความนิยมและการกระจายตัวของประเภททุนต่างๆ ทั้งให้เปล่าและส่วนลด"
+                  color="from-emerald-500 to-teal-600"
+                />
+                <FeatureCard
+                  icon={Search}
+                  title="ช่องทางการรับรู้"
+                  description="วิเคราะห์ประสิทธิภาพของช่องทางประชาสัมพันธ์ที่ทำให้นักศึกษารู้จักทุน"
+                  color="from-amber-500 to-orange-600"
+                />
+              </div>
+            </div>
+          </div>
         ) : data.length > 0 && (
           <>
             {/* Modern Controls */}
-            <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl p-6 mb-8 border border-white/20">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="relative z-20 bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl p-6 mb-8 border border-white/20">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <div className="space-y-2">
                   <label className="block text-sm font-semibold text-gray-700">เลือกสถาบัน</label>
-                  <select
-                    value={selectedInstitution}
-                    onChange={(e) => setSelectedInstitution(e.target.value)}
-                    className="w-full px-4 py-3 border-2 border-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white/50"
-                  >
-                    {institutions.map(institution => (
-                      <option key={institution} value={institution}>{institution}</option>
-                    ))}
-                  </select>
+                  <MultiSelectDropdown
+                    options={institutions}
+                    selectedValues={selectedInstitution}
+                    onChange={setSelectedInstitution}
+                    placeholder="เลือกสถาบัน"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="block text-sm font-semibold text-gray-700">เลือกคณะ</label>
+                  <MultiSelectDropdown
+                    options={facultyGroups}
+                    selectedValues={selectedFacultyGroup}
+                    onChange={setSelectedFacultyGroup}
+                    placeholder="เลือกคณะ"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="block text-sm font-semibold text-gray-700">เลือกสาขา</label>
+                  <MultiSelectDropdown
+                    options={faculties}
+                    selectedValues={selectedFaculty}
+                    onChange={setSelectedFaculty}
+                    placeholder="เลือกสาขา"
+                  />
                 </div>
 
                 <div className="space-y-2">
                   <label className="block text-sm font-semibold text-gray-700">ประเภททุน/ส่วนลด</label>
-                  <select
-                    value={selectedScholarshipType}
-                    onChange={(e) => setSelectedScholarshipType(e.target.value)}
-                    className="w-full px-4 py-3 border-2 border-gray-100 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white/50"
-                  >
-                    {scholarshipTypes.map(type => (
-                      <option key={type} value={type}>{type}</option>
-                    ))}
-                  </select>
+                  <MultiSelectDropdown
+                    options={scholarshipTypes}
+                    selectedValues={selectedScholarshipType}
+                    onChange={setSelectedScholarshipType}
+                    placeholder="ประเภททุน/ส่วนลด"
+                  />
                 </div>
               </div>
             </div>
@@ -855,43 +874,7 @@ const ScholarshipDashboard = () => {
           </>
         )}
 
-        {/* Summary Stats for Preview Mode */}
-        {!data.length && !isLoading && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <ScholarshipStatCard
-              title="รวมนักศึกษา"
-              value={previewData.reduce((sum, item) => sum + item.students, 0).toLocaleString()}
-              subtitle="เฉลี่ย: 281 คนต่อสถาบัน"
-              icon={Users}
-              gradient="from-blue-500 to-indigo-600"
-              trend={12}
-            />
-            <ScholarshipStatCard
-              title="ทุนการศึกษา"
-              value={previewData.reduce((sum, item) => sum + item.scholarships, 0).toLocaleString()}
-              subtitle="เฉลี่ย: 206 ทุนต่อสถาบัน"
-              icon={Award}
-              gradient="from-purple-500 to-violet-600"
-              trend={8}
-            />
-            <ScholarshipStatCard
-              title="งบประมาณรวม"
-              value={`${(previewData.reduce((sum, item) => sum + item.budget, 0) / 1000000).toFixed(1)}M`}
-              subtitle="เฉลี่ย: 6.2M บาทต่อสถาบัน"
-              icon={DollarSign}
-              gradient="from-emerald-500 to-green-600"
-              trend={15}
-            />
-            <ScholarshipStatCard
-              title="อนุมัติแล้ว"
-              value={previewData.reduce((sum, item) => sum + item.approved, 0).toLocaleString()}
-              subtitle="อัตราอนุมัติ: 89.2%"
-              icon={UserCheck}
-              gradient="from-amber-500 to-orange-600"
-              trend={6}
-            />
-          </div>
-        )}
+        {/* Stats for Preview Mode Removed */}
       </div>
     </div>
   );
