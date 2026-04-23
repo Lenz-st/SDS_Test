@@ -68,7 +68,7 @@ const MultiSelectDropdown = ({ options, selectedValues, onChange, placeholder })
       </div>
 
       {isOpen && (
-        <div className="absolute z-50 w-full mt-2 bg-white border border-gray-100 rounded-xl shadow-2xl max-h-64 overflow-y-auto overflow-x-hidden">
+        <div className="absolute z-50 left-0 mt-2 bg-white border border-gray-100 rounded-xl shadow-2xl max-h-72 overflow-y-auto" style={{ minWidth: '100%', width: 'max-content', maxWidth: '480px' }}>
           <div className="p-2 space-y-1">
             <div className="px-2 pb-2 pt-1">
               <div className="relative">
@@ -109,7 +109,7 @@ const MultiSelectDropdown = ({ options, selectedValues, onChange, placeholder })
                   <div className={`flex flex-shrink-0 items-center justify-center w-5 h-5 border rounded mr-3 ${isSelected ? 'bg-blue-600 border-blue-600' : 'border-gray-300'}`}>
                     {isSelected && <Check className="h-3 w-3 text-white" />}
                   </div>
-                  <span className={`text-sm truncate ${isSelected ? 'font-medium text-blue-700' : 'text-gray-700'}`}>{option}</span>
+                  <span className={`text-sm leading-snug whitespace-normal break-words ${isSelected ? 'font-medium text-blue-700' : 'text-gray-700'}`}>{option}</span>
                 </div>
               );
             })}

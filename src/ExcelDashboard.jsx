@@ -14,6 +14,7 @@ const ScholarshipDashboard = () => {
   const [selectedInstitution, setSelectedInstitution] = useState([]);
   const [selectedScholarshipType, setSelectedScholarshipType] = useState([]);
   const [selectedFaculty, setSelectedFaculty] = useState([]);
+  const [tableSearchTerm, setTableSearchTerm] = useState('');
   const [selectedFacultyGroup, setSelectedFacultyGroup] = useState([]);
 
   // Education-themed color palette
@@ -330,8 +331,8 @@ const ScholarshipDashboard = () => {
     return Object.values(counts).slice(0, 15);
   }, [filteredData, headers, data]);
 
-  const ScholarshipStatCard = ({ title, value, icon: Icon, gradient, subtitle, trend }) => (
-    <div className="relative overflow-hidden bg-white rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1">
+  const ScholarshipStatCard = ({ title, value, icon: Icon, gradient, subtitle, trend, className = "" }) => (
+    <div className={`relative overflow-hidden bg-white rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 ${className}`}>
       <div className={`absolute inset-0 bg-gradient-to-br ${gradient} opacity-5`}></div>
       <div className="relative p-6">
         <div className="flex items-center justify-between mb-4">
@@ -646,65 +647,109 @@ const ScholarshipDashboard = () => {
             {/* Age & Gender alongside Faculty Chart */}
             {data.length > 0 && (
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
-                {/* Left Column: Stats Cards */}
+                {/* Left Column: Gender Donut Chart + Age Card */}
                 <div className="col-span-1 flex flex-col gap-6">
                   {(() => {
-                    const cardsData = [];
                     const ageCol = headers.find(h => typeof h === 'string' && h.includes('อายุ'));
                     const genderCol = headers.find(h => typeof h === 'string' && h.includes('เพศ'));
 
-                    if (ageCol && summaryStats[ageCol]) {
-                      cardsData.push({
-                        title: ageCol,
-                        value: summaryStats[ageCol].average.toFixed(0),
-                        subtitle: 'ค่าเฉลี่ย',
-                        icon: Users
-                      });
-                    }
-
-                    if (genderCol) {
-                      if (summaryStats[genderCol]) {
-                        cardsData.push({
-                          title: genderCol,
-                          value: summaryStats[genderCol].average.toFixed(1),
-                          subtitle: 'ค่าเฉลี่ย',
-                          icon: Users
-                        });
-                      } else {
-                        const counts = filteredData.reduce((acc, row) => {
+                    const genderCounts = genderCol
+                      ? filteredData.reduce((acc, row) => {
                           const val = row[genderCol];
                           if (val) acc[val] = (acc[val] || 0) + 1;
                           return acc;
-                        }, {});
-                        let maxVal = '-';
-                        let maxCount = 0;
-                        Object.entries(counts).forEach(([k, v]) => {
-                          if (v > maxCount) {
-                            maxCount = v;
-                            maxVal = k;
-                          }
-                        });
-                        cardsData.push({
-                          title: genderCol,
-                          value: maxVal,
-                          subtitle: `ส่วนใหญ่ (${maxCount} คน)`,
-                          icon: Users
-                        });
-                      }
-                    }
+                        }, {})
+                      : {};
 
-                    return cardsData.map((card, index) => (
-                      <div className="h-full" key={card.title}>
-                        <ScholarshipStatCard
-                          title={card.title}
-                          value={card.value}
-                          subtitle={card.subtitle}
-                          icon={card.icon}
-                          gradient={gradients[index % gradients.length]}
-                          trend={Math.floor(Math.random() * 15) + 5}
-                        />
-                      </div>
-                    ));
+                    const genderData = Object.entries(genderCounts).map(([name, count]) => ({ name, count }));
+                    const totalGender = genderData.reduce((s, d) => s + d.count, 0);
+
+                    const genderColors = {
+                      'MALE': '#3b82f6',
+                      'FEMALE': '#ec4899',
+                      'ชาย': '#3b82f6',
+                      'หญิง': '#ec4899',
+                    };
+                    const fallbackColors = ['#8b5cf6', '#06b6d4', '#10b981', '#f59e0b'];
+
+                    return (
+                      <>
+                        {/* Gender Donut Chart Card */}
+                        {genderData.length > 0 && (
+                          <div className="relative overflow-hidden bg-white rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 p-5 flex-1 flex flex-col justify-center">
+                            <div className="absolute inset-0 bg-gradient-to-br from-pink-500 to-blue-500 opacity-5" />
+                            <div className="relative">
+                              <p className="text-gray-500 text-sm font-semibold mb-3">สัดส่วนเพศผู้รับทุน</p>
+                              <div className="flex items-center gap-4">
+                                <div style={{ width: 110, height: 110, flexShrink: 0 }}>
+                                  <ResponsiveContainer width="100%" height="100%">
+                                    <PieChart>
+                                      <Pie
+                                        data={genderData}
+                                        dataKey="count"
+                                        cx="50%"
+                                        cy="50%"
+                                        innerRadius={30}
+                                        outerRadius={50}
+                                        paddingAngle={3}
+                                        startAngle={90}
+                                        endAngle={-270}
+                                      >
+                                        {genderData.map((entry, index) => (
+                                          <Cell
+                                            key={`g-${index}`}
+                                            fill={genderColors[entry.name] || fallbackColors[index % fallbackColors.length]}
+                                          />
+                                        ))}
+                                      </Pie>
+                                      <Tooltip
+                                        contentStyle={{ backgroundColor: 'white', border: 'none', borderRadius: '10px', boxShadow: '0 4px 20px rgba(0,0,0,0.1)', fontSize: '12px' }}
+                                        formatter={(value) => [`${value} คน`, '']}
+                                      />
+                                    </PieChart>
+                                  </ResponsiveContainer>
+                                </div>
+                                <div className="flex flex-col gap-2 flex-1 min-w-0">
+                                  {genderData.map((entry, index) => {
+                                    const pct = totalGender > 0 ? ((entry.count / totalGender) * 100).toFixed(1) : 0;
+                                    const color = genderColors[entry.name] || fallbackColors[index % fallbackColors.length];
+                                    return (
+                                      <div key={entry.name} className="flex flex-col gap-0.5">
+                                        <div className="flex items-center justify-between">
+                                          <div className="flex items-center gap-1.5 min-w-0">
+                                            <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+                                            <span className="text-xs text-gray-600 truncate">{entry.name}</span>
+                                          </div>
+                                          <span className="text-xs font-bold ml-2" style={{ color }}>{pct}%</span>
+                                        </div>
+                                        <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                                          <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, backgroundColor: color }} />
+                                        </div>
+                                        <span className="text-xs text-gray-400">{entry.count.toLocaleString()} คน</span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Age Stat Card */}
+                        {ageCol && summaryStats[ageCol] && (
+                          <div className="flex-1 flex flex-col">
+                            <ScholarshipStatCard
+                              title={ageCol}
+                              value={summaryStats[ageCol].average.toFixed(0)}
+                              subtitle="ค่าเฉลี่ยอายุ (ปี)"
+                              icon={Users}
+                              gradient={gradients[1]}
+                              className="h-full flex flex-col justify-center"
+                            />
+                          </div>
+                        )}
+                      </>
+                    );
                   })()}
                 </div>
 
@@ -818,17 +863,39 @@ const ScholarshipDashboard = () => {
             {/* Modern Data Table */}
             <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl overflow-hidden border border-white/20">
               <div className="px-8 py-6 bg-gradient-to-r from-gray-50 to-blue-50 border-b border-gray-200">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
                     <h3 className="text-xl font-bold text-gray-900 flex items-center">
                       <BookOpen className="h-6 w-6 mr-2 text-blue-600" />
                       ตารางข้อมูลทุนการศึกษา
                     </h3>
-                    <p className="text-sm text-gray-600 mt-1">แสดง {filteredData.length} จาก {data.length} รายการ</p>
+                    <p className="text-sm text-gray-600 mt-1">
+                      แสดง {filteredData.filter(row => Object.values(row).some(v => String(v).toLowerCase().includes(tableSearchTerm.toLowerCase()))).length} จาก {filteredData.length} รายการ
+                    </p>
                   </div>
-                  <div className="flex items-center space-x-2 text-gray-500">
-                    <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                    <span className="text-sm font-medium">อัพเดทแบบ Real-time</span>
+                  <div className="flex items-center gap-4">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                      <input
+                        type="text"
+                        placeholder="ค้นหาในตาราง..."
+                        value={tableSearchTerm}
+                        onChange={e => setTableSearchTerm(e.target.value)}
+                        className="pl-9 pr-4 py-2 border border-gray-200 rounded-xl text-sm bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent w-52 transition-all"
+                      />
+                      {tableSearchTerm && (
+                        <button
+                          onClick={() => setTableSearchTerm('')}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex items-center space-x-2 text-gray-500">
+                      <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                      <span className="text-sm font-medium">Real-time</span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -844,32 +911,49 @@ const ScholarshipDashboard = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {filteredData.slice(0, 50).map((row, index) => (
-                      <tr key={index} className="hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 transition-all duration-200">
-                        {headers.map(header => (
-                          <td key={header} className="px-8 py-4 whitespace-nowrap text-sm text-gray-900 font-medium">
-                            {header.toLowerCase().includes('งบประมาณ') || header.toLowerCase().includes('budget') ?
-                              (row[header] ? `${parseFloat(row[header]).toLocaleString()} บาท` : '-') :
-                              (row[header] || '-')
-                            }
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
+                    {filteredData
+                      .filter(row =>
+                        !tableSearchTerm ||
+                        Object.values(row).some(v =>
+                          String(v).toLowerCase().includes(tableSearchTerm.toLowerCase())
+                        )
+                      )
+                      .slice(0, 50)
+                      .map((row, index) => (
+                        <tr key={index} className="hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 transition-all duration-200">
+                          {headers.map(header => (
+                            <td key={header} className="px-8 py-4 whitespace-nowrap text-sm text-gray-900 font-medium">
+                              {header.toLowerCase().includes('งบประมาณ') || header.toLowerCase().includes('budget') ?
+                                (row[header] ? `${parseFloat(row[header]).toLocaleString()} บาท` : '-') :
+                                (row[header] || '-')
+                              }
+                            </td>
+                          ))}
+                        </tr>
+                      ))
+                    }
                   </tbody>
                 </table>
               </div>
-              {filteredData.length > 50 && (
-                <div className="px-8 py-4 bg-gradient-to-r from-gray-50 to-blue-50 text-sm text-gray-600 border-t border-gray-200">
-                  <div className="flex items-center justify-between">
-                    <span>แสดง 50 รายการแรก จากทั้งหมด {filteredData.length} รายการ</span>
-                    <span className="text-blue-600 font-medium flex items-center">
-                      <BookOpen className="h-4 w-4 mr-1" />
-                      เลื่อนเพื่อดูข้อมูลเพิ่มเติม
-                    </span>
+              {(() => {
+                const tableFiltered = filteredData.filter(row =>
+                  !tableSearchTerm ||
+                  Object.values(row).some(v =>
+                    String(v).toLowerCase().includes(tableSearchTerm.toLowerCase())
+                  )
+                );
+                return tableFiltered.length > 50 && (
+                  <div className="px-8 py-4 bg-gradient-to-r from-gray-50 to-blue-50 text-sm text-gray-600 border-t border-gray-200">
+                    <div className="flex items-center justify-between">
+                      <span>แสดง 50 รายการแรก จากทั้งหมด {tableFiltered.length} รายการ</span>
+                      <span className="text-blue-600 font-medium flex items-center">
+                        <BookOpen className="h-4 w-4 mr-1" />
+                        เลื่อนเพื่อดูข้อมูลเพิ่มเติม
+                      </span>
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
             </div>
           </>
         )}
